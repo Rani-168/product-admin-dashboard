@@ -42,7 +42,7 @@ export const getCategories = async () => {
   return response.data;
 };
 
-export const getProductById = async (id) => {
-  const response = await api.get(`/products/${id}`);
+export const getProductById = async (id, signal) => {
+  const response = await api.get(`/products/${id}`, { signal });
   return response.data;
 };

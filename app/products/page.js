@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import AuthGuard from "../../components/AuthGuard";
 import ProductsDashboard from "./ProductsDashboard";
 
 function ProductsFallback() {
@@ -11,8 +12,10 @@ function ProductsFallback() {
 
 export default function ProductsPage() {
   return (
-    <Suspense fallback={<ProductsFallback />}>
-      <ProductsDashboard />
-    </Suspense>
+    <AuthGuard>
+      <Suspense fallback={<ProductsFallback />}>
+        <ProductsDashboard />
+      </Suspense>
+    </AuthGuard>
   );
 }
