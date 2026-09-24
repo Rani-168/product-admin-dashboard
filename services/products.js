@@ -1,14 +1,15 @@
 import api from "./api";
 
 export const getProducts = async ({
+  page = 1,
   limit = 10,
-  skip = 0,
   search = "",
   category = "",
-  sortBy = "",
-  order = "",
+  sort = "",
+  order = "asc",
   signal,
 }) => {
+  const skip = (page - 1) * limit;
   let url = "/products";
 
   if (search) {
@@ -25,11 +26,8 @@ export const getProducts = async ({
     params.append("q", search);
   }
 
-  if (sortBy) {
-    params.append("sortBy", sortBy);
-  }
-
-  if (order) {
+  if (sort) {
+    params.append("sortBy", sort);
     params.append("order", order);
   }
 
@@ -38,7 +36,7 @@ export const getProducts = async ({
 };
 
 export const getCategories = async () => {
-  const response = await api.get("/products/category-list");
+  const response = await api.get("/products/categories");
   return response.data;
 };
 

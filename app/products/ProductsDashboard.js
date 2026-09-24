@@ -18,7 +18,10 @@ export default function ProductsDashboard() {
   const categoryFromUrl = searchParams.get("category") || "";
   const sortFromUrl = searchParams.get("sort") || "";
   const orderFromUrl = searchParams.get("order") || "asc";
-  const pageFromUrl = Number(searchParams.get("page")) || 1;
+  const rawPage = searchParams.get("page");
+  const parsedPage = Number(rawPage);
+  const pageFromUrl =
+    Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const limitFromUrl = Number(searchParams.get("limit")) || 10;
   const [products, setProducts] = useState([]);
   const [searchInput, setSearchInput] = useState(searchFromUrl);
@@ -71,13 +74,21 @@ export default function ProductsDashboard() {
       try {
         const data = await getProducts({
           limit,
-          skip,
+          page,
           search: searchFromUrl,
           category: categoryFromUrl,
-          sortBy: sortFromUrl,
+          sort: sortFromUrl,
           order: orderFromUrl,
           signal: controller.signal,
         });
+
+        const maxPage = Math.max(1, Math.ceil((data.total || 0) / limit));
+        if (rawPage !== null && (pageFromUrl !== parsedPage || pageFromUrl > maxPage)) {
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("page", String(Math.min(pageFromUrl, maxPage)));
+          router.replace(`/products?${params.toString()}`);
+          return;
+        }
 
         const localProducts = getLocalProducts();
         const deletedIds = new Set(
@@ -140,7 +151,7 @@ export default function ProductsDashboard() {
     return () => {
       controller.abort();
     };
-  }, [page, limit, searchFromUrl, categoryFromUrl, sortFromUrl, orderFromUrl, retryCount, skip]);
+  }, [page, limit, searchFromUrl, categoryFromUrl, sortFromUrl, orderFromUrl, retryCount, rawPage, parsedPage, pageFromUrl, router, searchParams]);
 
   const updateUrl = useCallback((values) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -272,8 +283,8 @@ export default function ProductsDashboard() {
             >
               <option value="">All Categories</option>
               {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+                <option key={category.slug} value={category.slug}>
+                  {category.name}
                 </option>
               ))}
             </select>
