@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getCategories, getProducts } from "../../services/products";
 
@@ -10,22 +10,31 @@ const validLimits = [10, 20, 50];
 export default function ProductsDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchFromUrl = searchParams.get("search") || "";
+  const categoryFromUrl = searchParams.get("category") || "";
+  const sortFromUrl = searchParams.get("sort") || "";
+  const orderFromUrl = searchParams.get("order") || "asc";
+  const pageFromUrl = Number(searchParams.get("page")) || 1;
+  const limitFromUrl = Number(searchParams.get("limit")) || 10;
   const [products, setProducts] = useState([]);
+  const [searchInput, setSearchInput] = useState(searchFromUrl);
   const [categories, setCategories] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
+  const skipSearchDebounceRef = useRef(true);
 
-  const pageFromUrl = Number(searchParams.get("page")) || 1;
-  const limitFromUrl = Number(searchParams.get("limit")) || 10;
-  const searchFromUrl = searchParams.get("search") || "";
-  const categoryFromUrl = searchParams.get("category") || "";
-  const sortFromUrl = searchParams.get("sort") || "";
-  const orderFromUrl = searchParams.get("order") || "asc";
   const limit = validLimits.includes(limitFromUrl) ? limitFromUrl : 10;
   const page = pageFromUrl > 0 ? pageFromUrl : 1;
   const skip = (page - 1) * limit;
+
+  useEffect(() => {
+    skipSearchDebounceRef.current = true;
+    // The URL is an external source of truth for this controlled input.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearchInput(searchFromUrl);
+  }, [searchFromUrl]);
 
   useEffect(() => {
     let active = true;
@@ -49,7 +58,7 @@ export default function ProductsDashboard() {
   }, []);
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
 
     const loadProducts = async () => {
       setLoading(true);
@@ -63,21 +72,25 @@ export default function ProductsDashboard() {
           category: categoryFromUrl,
           sortBy: sortFromUrl,
           order: orderFromUrl,
+          signal: controller.signal,
         });
 
-        if (active) {
-          setProducts(data.products || []);
-          setTotal(data.total || 0);
-        }
+        setProducts(data.products || []);
+        setTotal(data.total || 0);
       } catch (productError) {
-        console.error(productError);
-        if (active) {
-          setError("Failed to load products. Please try again.");
-          setProducts([]);
-          setTotal(0);
+        if (
+          productError.name === "CanceledError" ||
+          productError.name === "AbortError"
+        ) {
+          return;
         }
+
+        console.error(productError);
+        setError("Failed to load products. Please try again.");
+        setProducts([]);
+        setTotal(0);
       } finally {
-        if (active) {
+        if (!controller.signal.aborted) {
           setLoading(false);
         }
       }
@@ -86,11 +99,11 @@ export default function ProductsDashboard() {
     loadProducts();
 
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [page, limit, searchFromUrl, categoryFromUrl, sortFromUrl, orderFromUrl, retryCount, skip]);
 
-  const updateUrl = (values) => {
+  const updateUrl = useCallback((values) => {
     const params = new URLSearchParams(searchParams.toString());
 
     Object.entries(values).forEach(([key, value]) => {
@@ -103,11 +116,30 @@ export default function ProductsDashboard() {
 
     const query = params.toString();
     router.push(query ? `/products?${query}` : "/products");
+  }, [router, searchParams]);
+
+  const handleSearchInput = (event) => {
+    setSearchInput(event.target.value);
   };
 
-  const handleSearch = (event) => {
-    updateUrl({ search: event.target.value, page: 1 });
-  };
+  useEffect(() => {
+    if (skipSearchDebounceRef.current) {
+      skipSearchDebounceRef.current = false;
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      updateUrl({
+        search: searchInput.trim(),
+        category: "",
+        page: 1,
+      });
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchInput, updateUrl]);
 
   const handleCategory = (event) => {
     updateUrl({
@@ -179,8 +211,8 @@ export default function ProductsDashboard() {
               id="product-search"
               type="search"
               placeholder="Search products..."
-              value={searchFromUrl}
-              onChange={handleSearch}
+              value={searchInput}
+              onChange={handleSearchInput}
               className="rounded-lg border px-3 py-2"
             />
 

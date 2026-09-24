@@ -7,11 +7,12 @@ export const getProducts = async ({
   category = "",
   sortBy = "",
   order = "",
+  signal,
 }) => {
   let url = "/products";
 
   if (search) {
-    url = `/products/search?q=${encodeURIComponent(search)}`;
+    url = "/products/search";
   } else if (category) {
     url = `/products/category/${encodeURIComponent(category)}`;
   }
@@ -19,6 +20,10 @@ export const getProducts = async ({
   const params = new URLSearchParams();
   params.append("limit", limit);
   params.append("skip", skip);
+
+  if (search) {
+    params.append("q", search);
+  }
 
   if (sortBy) {
     params.append("sortBy", sortBy);
@@ -28,7 +33,7 @@ export const getProducts = async ({
     params.append("order", order);
   }
 
-  const response = await api.get(`${url}?${params.toString()}`);
+  const response = await api.get(`${url}?${params.toString()}`, { signal });
   return response.data;
 };
 
