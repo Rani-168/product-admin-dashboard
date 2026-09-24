@@ -4,7 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AuthGuard from "../../../components/AuthGuard";
-import { getProductById } from "../../../services/products";
+import {
+  deleteProduct,
+  getProductById,
+} from "../../../services/products";
+import {
+  getDeletedProductIds,
+  getLocalProducts,
+  markProductDeleted,
+} from "../../../services/localProducts";
 
 function ProductHeader({ onLogout }) {
   return (
@@ -42,6 +50,7 @@ export default function ProductDetailsPage() {
   const id = params.id;
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -56,6 +65,22 @@ export default function ProductDetailsPage() {
       setError("");
 
       try {
+        const deletedIds = getDeletedProductIds();
+        const localProduct = getLocalProducts().find(
+          (item) => String(item.id) === String(id)
+        );
+
+        if (deletedIds.some((deletedId) => String(deletedId) === String(id))) {
+          setProduct(null);
+          setError("Product not found.");
+          return;
+        }
+
+        if (localProduct) {
+          setProduct(localProduct);
+          return;
+        }
+
         const data = await getProductById(id, controller.signal);
         setProduct(data);
       } catch (productError) {
@@ -86,6 +111,40 @@ export default function ProductDetailsPage() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     router.push("/login");
+  };
+
+  const handleDelete = async () => {
+    if (deleting || !product) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${product.title}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+
+    try {
+      const isLocalProduct = getLocalProducts().some(
+        (item) => String(item.id) === String(product.id)
+      );
+
+      if (!isLocalProduct) {
+        await deleteProduct(product.id);
+      }
+
+      markProductDeleted(product.id);
+      router.push("/products");
+    } catch (deleteError) {
+      console.error(deleteError);
+      setError("Failed to delete product.");
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -181,6 +240,23 @@ export default function ProductDetailsPage() {
                 <div className="mt-6">
                   <p className="text-sm text-gray-500">Brand</p>
                   <p className="font-medium">{product.brand || "N/A"}</p>
+                </div>
+
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Link
+                    href={`/products/${product.id}/edit`}
+                    className="rounded-lg bg-black px-5 py-2 text-white"
+                  >
+                    Edit Product
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="rounded-lg bg-red-600 px-5 py-2 text-white disabled:opacity-50"
+                  >
+                    {deleting ? "Deleting..." : "Delete Product"}
+                  </button>
                 </div>
               </div>
             </div>

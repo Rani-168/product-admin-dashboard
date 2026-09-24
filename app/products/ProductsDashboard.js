@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getCategories, getProducts } from "../../services/products";
+import {
+  getDeletedProductIds,
+  getLocalProducts,
+} from "../../services/localProducts";
 
 const validLimits = [10, 20, 50];
 
@@ -75,8 +79,43 @@ export default function ProductsDashboard() {
           signal: controller.signal,
         });
 
-        setProducts(data.products || []);
-        setTotal(data.total || 0);
+        const localProducts = getLocalProducts();
+        const deletedIds = new Set(
+          getDeletedProductIds().map((id) => String(id))
+        );
+        const localById = new Map(
+          localProducts.map((product) => [String(product.id), product])
+        );
+        const serverProducts = (data.products || [])
+          .filter((product) => !deletedIds.has(String(product.id)))
+          .map((product) => localById.get(String(product.id)) || product);
+        const normalizedSearch = searchFromUrl.trim().toLowerCase();
+        const localAdditions = localProducts.filter((product) => {
+          const isNew = !(data.products || []).some(
+            (serverProduct) => String(serverProduct.id) === String(product.id)
+          );
+          const matchesSearch = !normalizedSearch ||
+            [product.title, product.description, product.category]
+              .join(" ")
+              .toLowerCase()
+              .includes(normalizedSearch);
+          const matchesCategory =
+            !categoryFromUrl || product.category === categoryFromUrl;
+
+          return isNew && !deletedIds.has(String(product.id)) && matchesSearch && matchesCategory;
+        });
+        const mergedProducts =
+          page === 1
+            ? [...localAdditions, ...serverProducts].slice(0, limit)
+            : serverProducts;
+        const deletedServerCount = getDeletedProductIds().filter(
+          (id) => !localById.has(String(id))
+        ).length;
+
+        setProducts(mergedProducts);
+        setTotal(
+          Math.max(0, (data.total || 0) - deletedServerCount + localAdditions.length)
+        );
       } catch (productError) {
         if (
           productError.name === "CanceledError" ||
@@ -200,6 +239,12 @@ export default function ProductsDashboard() {
         <header className="mb-6">
           <h2 className="text-2xl font-bold">Products</h2>
           <p className="text-gray-500">Manage your products</p>
+          <Link
+            href="/products/add"
+            className="mt-4 inline-block rounded-lg bg-black px-5 py-2 text-center text-white"
+          >
+            Add Product
+          </Link>
         </header>
 
         <section className="mb-6 rounded-xl bg-white p-4 shadow-sm">
